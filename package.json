@@ -1,0 +1,14 @@
+{
+  "name": "ai-discord-bot-w-gemini-2.5-flash-madeby-vedojar",
+  "version": "1.0.0",
+  "description": "This bot allows you to chat with an AI robot powered by Gemini 2.5 Flash on your Discord server. It's fully customizable. Please read README text",
+  "main": "aibot.js",
+  "scripts": {
+    "start": "node aibot.js"
+  },
+  "dependencies": {
+    "@google/genai": "^0.1.2",
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.5"
+  }
+}
