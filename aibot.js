@@ -21,15 +21,8 @@ const chatHistories = new Map();
 // her kullanıcının son mesaj zamanı (memory leak + inaktif sohbetleri temizlemek için)
 const lastActive = new Map();
 
-// ==== FREE TIER GÜNLÜK KOTA KORUMASI ====
-// gemini-2.5-flash-lite kullanıyoruz: free tier'da kalite/miktar dengesi
-// en iyi olan model burası - Flash'tan kat kat yüksek günlük kota,
-// kalite kaybı ise samimi sohbet botu için önemsiz seviyede.
-// NOT: Gerçek RPD sayını https://aistudio.google.com/usage adresinden
-// gör (kaynaklar 250-1500 arası değişen rakamlar veriyor, kesin olan
-// projene bağlı). Aşağıdaki 100 güvenli/düşük bir tahmin - gerçek
-// limitini görünce bu sayıyı yükseltebilirsin.
-const DAILY_LIMIT = 100;
+
+const DAILY_LIMIT = 200;
 let dailyRequestCount = 0;
 let resetTime = getNextMidnight();
 
@@ -47,10 +40,7 @@ function checkAndResetDailyCounter() {
     }
 }
 
-// ==== İNAKTİF SOHBETLERİ TEMİZLEME (memory leak önlemi) ====
-// Bot uzun süre açık kaldığında her kullanıcı için tutulan session'lar
-// hiç silinmediği için RAM şişer. 6 saatten fazla mesaj atmayan
-// kullanıcıların session'ını siliyoruz.
+// memory leak
 const INACTIVE_TIMEOUT_MS = 6 * 60 * 60 * 1000; // 6 saat
 
 function cleanupInactiveSessions() {
@@ -66,13 +56,7 @@ setInterval(cleanupInactiveSessions, 30 * 60 * 1000); // her 30 dakikada bir kon
 
 // bots personality to here pls custom its for turkish
 const BOT_PERSONALITY = `  
-Sen samimi, canayakın, biraz esprili ve gerektiğinde direkt/net konuşan bir yapay zeka asistanısın. 
-Gereksiz resmiyetten kaçın, bir dost, kanka gibi konuş ama teknik konularda da net ve bilgili ol.
-Az bile olsa argo kullan.
-"Kanki, Kanka, Cano" gibi hitaplar kullan ama karşıdaki kullanıcının hitaplarına göre kendini şekillendir.
-"Sa" gibi kısaltılmış kelimelerin uzun halleriymiş gibi cevap ver örnek: "sa" "as" veya aleykum selam.
-Eskideki sohbetlere göre karşındakine göre kendini şekillendir.
-hiç bir zaman @everyone ve @here yazma yaz diyenleri esprili hayır ben yapamam tarzı cevaplar ver.
+write what if you want IMPORTANT its for personality
 `;
 
 // 
@@ -91,7 +75,7 @@ client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.content) return;
 
     // id customizable
-    const CHAT_CHANNEL_ID = "1495159768443256862"; // change this for ur id
+    const CHAT_CHANNEL_ID = "xxxxxxxxxxxx"; // change this for ur id
 
     let soraBilirsin = false;
 
