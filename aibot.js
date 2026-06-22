@@ -21,8 +21,8 @@ const chatHistories = new Map();
 // her kullanıcının son mesaj zamanı (memory leak + inaktif sohbetleri temizlemek için)
 const lastActive = new Map();
 
-
-const DAILY_LIMIT = 200;
+// yes
+const DAILY_LIMIT = 100;
 let dailyRequestCount = 0;
 let resetTime = getNextMidnight();
 
@@ -40,8 +40,8 @@ function checkAndResetDailyCounter() {
     }
 }
 
-// memory leak
-const INACTIVE_TIMEOUT_MS = 6 * 60 * 60 * 1000; // 6 saat
+//mem leak
+const INACTIVE_TIMEOUT_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 function cleanupInactiveSessions() {
     const now = Date.now();
@@ -53,10 +53,46 @@ function cleanupInactiveSessions() {
     }
 }
 setInterval(cleanupInactiveSessions, 30 * 60 * 1000); // her 30 dakikada bir kontrol et
+// try again
+const RETRYABLE_STATUS_CODES = [500, 503, 504];
+const MAX_RETRIES = 2;
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function sendMessageWithRetry(chatSession, message) {
+    let lastError;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            return await chatSession.sendMessage({ message });
+        } catch (error) {
+            lastError = error;
+            const isRetryable = RETRYABLE_STATUS_CODES.includes(error.status);
+            const hasAttemptsLeft = attempt < MAX_RETRIES;
+
+            if (isRetryable && hasAttemptsLeft) {
+                const waitMs = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s...
+                console.warn(`Gemini ${error.status} döndü, ${waitMs}ms sonra yeniden denenecek (deneme ${attempt + 1}/${MAX_RETRIES})`);
+                await sleep(waitMs);
+                continue;
+            }
+            throw error; // retryable değilse veya hakkımız bittiyse dışarı fırlat
+        }
+    }
+    throw lastError;
+}
 
 // bots personality to here pls custom its for turkish
 const BOT_PERSONALITY = `  
-write what if you want IMPORTANT its for personality
+Sen samimi, canayakın, biraz esprili ve gerektiğinde direkt/net konuşan bir yapay zeka asistanısın. 
+Gereksiz resmiyetten kaçın, bir dost, kanka gibi konuş ama teknik konularda da net ve bilgili ol.
+Az bile olsa argo kullan.
+"Kanki, Kanka, Cano" gibi hitaplar kullan ama karşıdaki kullanıcının hitaplarına göre kendini şekillendir.
+"Sa" gibi kısaltılmış kelimelerin uzun halleriymiş gibi cevap ver örnek: "sa" "as" veya aleykum selam.
+Eskideki sohbetlere göre karşındakine göre kendini şekillendir.
+hiç bir zaman @everyone ve @here yazma yaz diyenleri esprili hayır ben yapamam tarzı cevaplar ver.
+@everyone veya @here atıldığında üstüne alınma ve bu mesajlara cevap yazma.
 `;
 
 // 
@@ -75,7 +111,7 @@ client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.content) return;
 
     // id customizable
-    const CHAT_CHANNEL_ID = "xxxxxxxxxxxx"; // change this for ur id
+    const CHAT_CHANNEL_ID = "1495159768443256862"; // change this for ur id
 
     let soraBilirsin = false;
 
@@ -125,13 +161,21 @@ client.on('messageCreate', async (message) => {
 
         dailyRequestCount++;
 
-        // send msg to gemini 2.5 flash model
-        const response = await userChatSession.sendMessage({
-            message: cleanMessage
-        });
+        // send msg to gemini 2.5 flash model 
+        const response = await sendMessageWithRetry(userChatSession, cleanMessage);
+
+        // response.text can sometimes be undefined/empty (safety filter,
+        // empty candidate, etc.) - without this check, .length below
+        // throws a TypeError that lands in the catch block below
+        // (this is the real cause of the "please try again" message you saw)
+        let botReply = response.text;
+        if (!botReply || botReply.trim().length === 0) {
+            console.warn("Gemini returned empty response. Full response:", JSON.stringify(response, null, 2));
+            await message.reply("couldn't generate a reply, try asking differently");
+            return;
+        }
 
         // control of discord 2000 
-        let botReply = response.text;
         if (botReply.length > 2000) {
             botReply = botReply.substring(0, 1995) + "...";
         }
@@ -140,13 +184,17 @@ client.on('messageCreate', async (message) => {
         await message.reply(botReply);
 
     } catch (error) {
-        console.error("Gemini entegrasyon hatası:", error);
+        console.error("Gemini entegrasyon hatası - message:", error.message || error);
+        console.error("Gemini entegrasyon hatası - status:", error.status);
+        console.error("Gemini entegrasyon hatası - stack:", error.stack);
 
         // 429 error
         if (error.status === 429) {
             // 
             dailyRequestCount = DAILY_LIMIT;
             await message.reply("My daily Gemini 2.5 flash quota has been used up, please try again later."); // customizable
+        } else if (error.status === 503 || error.status === 500 || error.status === 504) {
+            await message.reply("Google's model is overloaded right now, even retries failed - try again in a minute"); // customizable
         } else {
             await message.reply("please try again");  // custom
         }
